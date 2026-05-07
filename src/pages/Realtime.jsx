@@ -1,5 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable no-unused-vars */
 import { useState, useEffect } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { Panel, GaugeRing, Badge } from '../components/UI.jsx'
@@ -8,6 +6,14 @@ import { getLatestPzem } from '../lib/api.js'
 function toNumber(value, fallback = 0) {
     const n = Number(value)
     return Number.isFinite(n) ? n : fallback
+}
+
+function formatDisplayNumber(value, maxDecimals = 3) {
+    const n = Number(value)
+    if (!Number.isFinite(n)) return '0'
+
+    const fixed = n.toFixed(maxDecimals)
+    return fixed.replace(/\.0+$/, '').replace(/(\.[0-9]*?)0+$/, '$1')
 }
 
 function formatRealtimePoint(payload = {}) {
@@ -140,7 +146,7 @@ export default function Realtime() {
                     }}>
                         <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: 2, marginBottom: 10 }}>{m.label}</div>
                         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: m.warn ? '#f87171' : m.color, lineHeight: 1 }}>
-                            {m.value}
+                            {formatDisplayNumber(m.value)}
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>{m.unit}</div>
                         {m.warn && (
