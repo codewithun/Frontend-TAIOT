@@ -143,7 +143,7 @@ export function GaugeRing({ value, max = 100, label, unit, color = '#22d3ee', si
                     />
                 </svg>
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: size * 0.2, fontWeight: 700, color, lineHeight: 1 }}>{Math.round(value)}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: size * 0.2, fontWeight: 700, color, lineHeight: 1 }}>{value}</span>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: size * 0.1, color: 'var(--text-muted)' }}>{unit}</span>
                 </div>
             </div>

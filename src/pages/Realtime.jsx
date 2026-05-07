@@ -5,13 +5,43 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Panel, GaugeRing, Badge } from '../components/UI.jsx'
 import { getLatestPzem } from '../lib/api.js'
 
-function generatePoint(prev) {
+function toNumber(value, fallback = 0) {
+    const n = Number(value)
+    return Number.isFinite(n) ? n : fallback
+}
+
+function formatRealtimePoint(payload = {}) {
+    const raw = payload.raw || {}
+    const source = raw.pzem || raw
+
+    const pzem1 = source.pzem1 || {}
+    const pzem2 = source.pzem2 || {}
+
+    const p1Power = toNumber(pzem1.power, toNumber(payload.power || payload.power_w, 0))
+    const p2Power = toNumber(pzem2.power, 0)
+    const p1Voltage = toNumber(pzem1.voltage, toNumber(payload.voltage, 0))
+    const p2Voltage = toNumber(pzem2.voltage, 0)
+    const p1Current = toNumber(pzem1.current, toNumber(payload.current, 0))
+    const p2Current = toNumber(pzem2.current, 0)
+    const p1Frequency = toNumber(pzem1.frequency, toNumber(payload.frequency, 0))
+    const p2Frequency = toNumber(pzem2.frequency, 0)
+
     return {
-        time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        daya: Math.round((prev?.daya || 1800) + (Math.random() - 0.5) * 80),
-        tegangan: parseFloat(((prev?.tegangan || 222) + (Math.random() - 0.5) * 2).toFixed(1)),
-        arus: parseFloat(((prev?.arus || 8.2) + (Math.random() - 0.5) * 0.3).toFixed(2)),
-        frekuensi: parseFloat((50 + (Math.random() - 0.5) * 0.2).toFixed(2)),
+        time: new Date(payload.serverTimestamp || payload.timestamp || Date.now()).toLocaleTimeString('id-ID', {
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+        }),
+        pzem1_daya: p1Power,
+        pzem2_daya: p2Power,
+        pzem1_tegangan: p1Voltage,
+        pzem2_tegangan: p2Voltage,
+        pzem1_arus: p1Current,
+        pzem2_arus: p2Current,
+        pzem1_frekuensi: p1Frequency,
+        pzem2_frekuensi: p2Frequency,
+        total_daya: p1Power + p2Power,
+        avg_tegangan: (p1Voltage + p2Voltage) / (p2Voltage > 0 ? 2 : 1),
+        total_arus: p1Current + p2Current,
+        avg_frekuensi: (p1Frequency + p2Frequency) / (p2Frequency > 0 ? 2 : 1),
     }
 }
 
@@ -28,13 +58,21 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function Realtime() {
-    const [data, setData] = useState(() => {
-        const pts = []
-        let prev = null
-        for (let i = 0; i < 30; i++) { prev = generatePoint(prev); pts.push(prev) }
-        return pts
+    const [data, setData] = useState([])
+    const [latest, setLatest] = useState({
+        pzem1_daya: 0,
+        pzem2_daya: 0,
+        pzem1_tegangan: 0,
+        pzem2_tegangan: 0,
+        pzem1_arus: 0,
+        pzem2_arus: 0,
+        pzem1_frekuensi: 0,
+        pzem2_frekuensi: 0,
+        total_daya: 0,
+        avg_tegangan: 0,
+        total_arus: 0,
+        avg_frekuensi: 0,
     })
-    const [latest, setLatest] = useState(data[data.length - 1])
     const [paused, setPaused] = useState(false)
     const [error, setError] = useState(null)
 
@@ -47,28 +85,14 @@ export default function Realtime() {
                 const res = await getLatestPzem()
                 if (!mounted) return
                 if (res?.success && res.data) {
-                    const latestData = {
-                        time: new Date(res.data.serverTimestamp || Date.now()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                        daya: Math.round(res.data.power || (res.data.power_w || 0)),
-                        tegangan: parseFloat((res.data.voltage || 0).toFixed(1)),
-                        arus: parseFloat((res.data.current || 0).toFixed(2)),
-                        frekuensi: parseFloat((res.data.frequency || 0).toFixed(2)),
-                    }
+                    const latestData = formatRealtimePoint(res.data)
                     setLatest(latestData)
                     setData(prev => [...prev.slice(-59), latestData])
                     setError(null)
                     return
                 }
-
-                // fallback to generated point when backend not available
-                const newPoint = generatePoint(data[data.length - 1])
-                setLatest(newPoint)
-                setData(prev => [...prev.slice(-59), newPoint])
             } catch (err) {
                 setError(err.message)
-                const newPoint = generatePoint(data[data.length - 1])
-                setLatest(newPoint)
-                setData(prev => [...prev.slice(-59), newPoint])
             }
         }
 
@@ -87,6 +111,7 @@ export default function Realtime() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: paused ? '#f87171' : '#4ade80', boxShadow: `0 0 8px ${paused ? '#f87171' : '#4ade80'}`, animation: paused ? 'none' : 'pulse-glow 1s ease-in-out infinite' }} />
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: paused ? '#f87171' : '#4ade80' }}>{paused ? 'PAUSED' : 'STREAMING LIVE — 1s interval'}</span>
+                    {error && <Badge type="error">BACKEND OFFLINE</Badge>}
                 </div>
                 <button onClick={() => setPaused(p => !p)} style={{
                     padding: '7px 16px', borderRadius: 6, fontSize: 12, fontFamily: 'var(--font-mono)',
@@ -102,10 +127,10 @@ export default function Realtime() {
             {/* Live metrics top */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
                 {[
-                    { label: 'DAYA', value: latest.daya, unit: 'W', color: '#22d3ee', warn: latest.daya > 2500 },
-                    { label: 'TEGANGAN', value: latest.tegangan, unit: 'V', color: '#4ade80', warn: latest.tegangan < 210 || latest.tegangan > 230 },
-                    { label: 'ARUS', value: latest.arus, unit: 'A', color: '#facc15', warn: latest.arus > 15 },
-                    { label: 'FREKUENSI', value: latest.frekuensi, unit: 'Hz', color: '#a78bfa', warn: latest.frekuensi < 49.5 || latest.frekuensi > 50.5 },
+                    { label: 'DAYA TOTAL', value: latest.total_daya, unit: 'W', color: '#22d3ee', warn: latest.total_daya > 3000 },
+                    { label: 'TEGANGAN AVG', value: latest.avg_tegangan, unit: 'V', color: '#4ade80', warn: latest.avg_tegangan > 0 && (latest.avg_tegangan < 210 || latest.avg_tegangan > 230) },
+                    { label: 'ARUS TOTAL', value: latest.total_arus, unit: 'A', color: '#facc15', warn: latest.total_arus > 16 },
+                    { label: 'FREKUENSI AVG', value: latest.avg_frekuensi, unit: 'Hz', color: '#a78bfa', warn: latest.avg_frekuensi > 0 && (latest.avg_frekuensi < 49.5 || latest.avg_frekuensi > 50.5) },
                 ].map(m => (
                     <div key={m.label} style={{
                         background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', padding: '16px 20px',
@@ -128,37 +153,48 @@ export default function Realtime() {
             </div>
 
             {/* Gauges */}
-            <Panel title="Gauge Panel Real-Time">
-                <div style={{ display: 'flex', justifyContent: 'space-around', padding: '8px 0' }}>
-                    <GaugeRing value={latest.daya} max={3000} label="Daya" unit="W" color="#22d3ee" size={140} />
-                    <GaugeRing value={latest.tegangan} max={240} label="Tegangan" unit="V" color="#4ade80" size={140} />
-                    <GaugeRing value={latest.arus} max={20} label="Arus" unit="A" color="#facc15" size={140} />
-                    <GaugeRing value={latest.frekuensi} max={60} label="Frekuensi" unit="Hz" color="#a78bfa" size={140} />
-                </div>
-            </Panel>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <Panel title="Gauge Panel PZEM1">
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, padding: '8px 0' }}>
+                        <GaugeRing value={latest.pzem1_daya} max={3000} label="PZEM1 Daya" unit="W" color="#22d3ee" size={120} />
+                        <GaugeRing value={latest.pzem1_tegangan} max={250} label="PZEM1 Tegangan" unit="V" color="#4ade80" size={120} />
+                        <GaugeRing value={latest.pzem1_arus} max={20} label="PZEM1 Arus" unit="A" color="#fbbf24" size={120} />
+                    </div>
+                </Panel>
+
+                <Panel title="Gauge Panel PZEM2">
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, padding: '8px 0' }}>
+                        <GaugeRing value={latest.pzem2_daya} max={3000} label="PZEM2 Daya" unit="W" color="#38bdf8" size={120} />
+                        <GaugeRing value={latest.pzem2_tegangan} max={250} label="PZEM2 Tegangan" unit="V" color="#10b981" size={120} />
+                        <GaugeRing value={latest.pzem2_arus} max={20} label="PZEM2 Arus" unit="A" color="#fbbf24" size={120} />
+                    </div>
+                </Panel>
+            </div>
 
             {/* Rolling charts */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <Panel title="Daya (W) — Live">
+                <Panel title="Daya PZEM1 vs PZEM2 (W)">
                     <ResponsiveContainer width="100%" height={180}>
                         <LineChart data={data} margin={{ top: 5, right: 5, bottom: 0, left: -10 }}>
                             <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="4 4" />
                             <XAxis dataKey="time" tick={{ fill: '#475569', fontSize: 9, fontFamily: 'Share Tech Mono' }} interval={9} />
                             <YAxis domain={['auto', 'auto']} tick={{ fill: '#475569', fontSize: 9, fontFamily: 'Share Tech Mono' }} />
                             <Tooltip content={<CustomTooltip />} />
-                            <Line type="monotone" dataKey="daya" stroke="#22d3ee" strokeWidth={1.5} dot={false} isAnimationActive={false} name="Daya" />
+                            <Line type="monotone" dataKey="pzem1_daya" stroke="#22d3ee" strokeWidth={1.5} dot={false} isAnimationActive={false} name="PZEM1 Daya" />
+                            <Line type="monotone" dataKey="pzem2_daya" stroke="#38bdf8" strokeWidth={1.5} dot={false} isAnimationActive={false} name="PZEM2 Daya" />
                         </LineChart>
                     </ResponsiveContainer>
                 </Panel>
 
-                <Panel title="Tegangan (V) — Live">
+                <Panel title="Tegangan PZEM1 vs PZEM2 (V)">
                     <ResponsiveContainer width="100%" height={180}>
                         <LineChart data={data} margin={{ top: 5, right: 5, bottom: 0, left: -10 }}>
                             <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="4 4" />
                             <XAxis dataKey="time" tick={{ fill: '#475569', fontSize: 9, fontFamily: 'Share Tech Mono' }} interval={9} />
                             <YAxis domain={[205, 235]} tick={{ fill: '#475569', fontSize: 9, fontFamily: 'Share Tech Mono' }} />
                             <Tooltip content={<CustomTooltip />} />
-                            <Line type="monotone" dataKey="tegangan" stroke="#4ade80" strokeWidth={1.5} dot={false} isAnimationActive={false} name="Tegangan" />
+                            <Line type="monotone" dataKey="pzem1_tegangan" stroke="#4ade80" strokeWidth={1.5} dot={false} isAnimationActive={false} name="PZEM1 Tegangan" />
+                            <Line type="monotone" dataKey="pzem2_tegangan" stroke="#86efac" strokeWidth={1.5} dot={false} isAnimationActive={false} name="PZEM2 Tegangan" />
                         </LineChart>
                     </ResponsiveContainer>
                 </Panel>

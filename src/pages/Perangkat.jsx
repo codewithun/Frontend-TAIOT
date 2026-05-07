@@ -1,52 +1,92 @@
-import { useState } from 'react'
-import { Panel, ProgressBar } from '../components/UI.jsx'
-import { perangkat } from '../data/mockData.js'
-import { setRelayState } from '../lib/api.js'
-import { Power, Clock, Zap } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Panel } from '../components/UI.jsx'
+import { getRelayState, setRelayState } from '../lib/api.js'
 
 export default function Perangkat() {
-    const [devices, setDevices] = useState(perangkat)
+    const [devices, setDevices] = useState([
+        { id: 1, nama: 'Relay 1', description: 'Relay Control 1', status: 'nonaktif', warna: '#22d3ee' },
+        { id: 2, nama: 'Relay 2', description: 'Relay Control 2', status: 'nonaktif', warna: '#4ade80' },
+    ])
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState(null)
+    const [toggling, setToggling] = useState({})
+
+    // Fetch relay state on mount and auto-refresh
+    useEffect(() => {
+        const fetchRelayState = async () => {
+            try {
+                const res = await getRelayState()
+                if (res?.success && res.state) {
+                    setDevices(prev => [
+                        { ...prev[0], status: res.state.relay1 ? 'aktif' : 'nonaktif' },
+                        { ...prev[1], status: res.state.relay2 ? 'aktif' : 'nonaktif' },
+                    ])
+                }
+                setError(null)
+            } catch (err) {
+                setError(err.message)
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        fetchRelayState()
+
+        // Auto-refresh relay state every 3 seconds to sync with external API
+        const interval = setInterval(fetchRelayState, 3000)
+        return () => clearInterval(interval)
+    }, [])
 
     const toggle = async (id) => {
         const device = devices.find(d => d.id === id)
         if (!device) return
-        const isOn = device.status === 'aktif'
+        const relay1Now = devices.find(d => d.id === 1)?.status === 'aktif'
+        const relay2Now = devices.find(d => d.id === 2)?.status === 'aktif'
+        const nextRelay1 = id === 1 ? !relay1Now : relay1Now
+        const nextRelay2 = id === 2 ? !relay2Now : relay2Now
 
-        // Map first two devices to relay1/relay2 if applicable
-        const relayKey = id === 1 ? 'relay1' : id === 2 ? 'relay2' : null
+        // Set toggling state for button loading indicator
+        setToggling(prev => ({ ...prev, [id]: true }))
 
-        if (relayKey) {
-            try {
-                const payload = { [relayKey]: !isOn }
-                const res = await setRelayState(payload)
-                if (res?.success && res.state) {
-                    // update local state to reflect server state
-                    setDevices(prev => prev.map(d => d.id === id ? { ...d, status: !isOn ? 'aktif' : 'nonaktif' } : d))
-                    return
-                }
-                // eslint-disable-next-line no-unused-vars
-            } catch (err) {
-                // fallthrough to optimistic update
+        try {
+            const payload = { relay1: nextRelay1, relay2: nextRelay2 }
+            const res = await setRelayState(payload)
+
+            if (res?.success && res.state) {
+                // Update UI with response from server
+                setDevices(prev => [
+                    { ...prev[0], status: res.state.relay1 ? 'aktif' : 'nonaktif' },
+                    { ...prev[1], status: res.state.relay2 ? 'aktif' : 'nonaktif' },
+                ])
+                setError(null)
+            } else {
+                throw new Error('Failed to update relay state')
             }
+        } catch (err) {
+            console.error('Toggle error:', err.message)
+            setError(err.message)
+            // Fallback: optimistic update
+            setDevices(prev => prev.map(d => d.id === id ? { ...d, status: d.status === 'aktif' ? 'nonaktif' : 'aktif' } : d))
+        } finally {
+            setToggling(prev => ({ ...prev, [id]: false }))
         }
-
-        // fallback: optimistic local-only toggle
-        setDevices(prev => prev.map(d => d.id === id ? { ...d, status: d.status === 'aktif' ? 'nonaktif' : 'aktif' } : d))
     }
 
-    const totalAktif = devices.filter(d => d.status === 'aktif').reduce((s, d) => s + d.daya, 0)
-    const totalPerangkat = devices.reduce((s, d) => s + d.daya, 0)
+    const totalAktif = devices.filter(d => d.status === 'aktif').length
+    const totalPerangkat = devices.length
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
+            {/* Status message */}
+            {loading && <div style={{ padding: '12px 16px', background: 'rgba(34,211,238,0.12)', border: '1px solid rgba(34,211,238,0.3)', borderRadius: 8, color: '#22d3ee', fontSize: 12, fontFamily: 'var(--font-mono)' }}>⏳ Loading relay state...</div>}
+            {error && <div style={{ padding: '12px 16px', background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 8, color: '#f87171', fontSize: 12, fontFamily: 'var(--font-mono)' }}>⚠️ Error: {error}</div>}
+
             {/* Summary */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
                 {[
-                    { label: 'Total Perangkat', value: devices.length, unit: 'unit', color: '#22d3ee' },
-                    { label: 'Aktif', value: devices.filter(d => d.status === 'aktif').length, unit: 'unit', color: '#4ade80' },
-                    { label: 'Nonaktif', value: devices.filter(d => d.status === 'nonaktif').length, unit: 'unit', color: '#f87171' },
-                    { label: 'Beban Aktif', value: (totalAktif / 1000).toFixed(2), unit: 'kW', color: '#facc15' },
+                    { label: 'Total Relay', value: totalPerangkat, unit: 'unit', color: '#22d3ee' },
+                    { label: 'Relay Aktif', value: totalAktif, unit: 'unit', color: '#4ade80' },
                 ].map(s => (
                     <div key={s.label} style={{
                         background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', padding: '16px 20px',
@@ -61,60 +101,46 @@ export default function Perangkat() {
                 ))}
             </div>
 
-            {/* Device grid */}
-            <Panel title={`Manajemen Perangkat (${devices.length} unit)`}>
+            {/* Relay Control Panel */}
+            <Panel title={`Manajemen Relay (${totalPerangkat} unit)`}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
                     {devices.map(d => {
                         const isOn = d.status === 'aktif'
-                        const kwhDay = ((d.daya * d.jam) / 1000).toFixed(2)
-                        const biayaDay = Math.round(d.daya * d.jam * 1.444 / 1000)
 
                         return (
                             <div key={d.id} style={{
-                                background: 'var(--bg-card-hover)', borderRadius: 'var(--radius-lg)', padding: '16px 18px',
+                                background: 'var(--bg-card-hover)', borderRadius: 'var(--radius-lg)', padding: '24px 20px',
                                 border: `1px solid ${isOn ? `${d.warna}33` : 'rgba(71,85,105,0.3)'}`,
                                 transition: 'all 0.3s ease',
                                 opacity: isOn ? 1 : 0.65,
+                                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20,
                             }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                                    <div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: isOn ? d.warna : '#475569', boxShadow: isOn ? `0 0 8px ${d.warna}` : 'none', animation: isOn ? 'pulse-glow 2s ease-in-out infinite' : 'none' }} />
-                                            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{d.nama}</span>
-                                        </div>
-                                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{d.ruang}</span>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 6 }}>
+                                        <div style={{ width: 12, height: 12, borderRadius: '50%', background: isOn ? d.warna : '#475569', boxShadow: isOn ? `0 0 12px ${d.warna}` : 'none', animation: isOn ? 'pulse-glow 2s ease-in-out infinite' : 'none' }} />
+                                        <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{d.nama}</span>
                                     </div>
-
-                                    <button onClick={() => toggle(d.id)} style={{
-                                        width: 36, height: 20, borderRadius: 10, border: 'none', cursor: 'pointer',
-                                        background: isOn ? d.warna : '#334155', position: 'relative',
-                                        transition: 'all 0.3s ease',
-                                        boxShadow: isOn ? `0 0 12px ${d.warna}66` : 'none',
-                                    }}>
-                                        <div style={{
-                                            position: 'absolute', top: 2,
-                                            left: isOn ? 18 : 2,
-                                            width: 16, height: 16, borderRadius: '50%', background: '#fff',
-                                            transition: 'left 0.3s ease',
-                                            boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
-                                        }} />
-                                    </button>
+                                    <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{d.description}</span>
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
-                                    {[
-                                        { icon: Zap, label: 'Daya', value: `${d.daya}W`, color: d.warna },
-                                        { icon: Clock, label: 'Jam/hari', value: `${d.jam}j`, color: '#94a3b8' },
-                                        { icon: Power, label: 'kWh/hari', value: kwhDay, color: '#94a3b8' },
-                                    ].map(m => (
-                                        <div key={m.label} style={{ textAlign: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: 6, padding: '6px 4px' }}>
-                                            <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: m.color, fontWeight: 600 }}>{m.value}</div>
-                                            <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 1 }}>{m.label}</div>
-                                        </div>
-                                    ))}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center' }}>
+                                    <div style={{ textAlign: 'center' }}>
+                                        <div style={{ fontSize: 28, fontWeight: 700, color: isOn ? d.warna : '#94a3b8', fontFamily: 'var(--font-mono)' }}>{isOn ? 'ON' : 'OFF'}</div>
+                                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{isOn ? 'AKTIF' : 'NONAKTIF'}</div>
+                                    </div>
                                 </div>
 
-                                <ProgressBar value={d.daya} max={totalPerangkat} color={isOn ? d.warna : '#334155'} label={`Porsi beban`} valueLabel={`Rp ${biayaDay.toLocaleString('id-ID')}/hari`} />
+                                <button onClick={() => toggle(d.id)} disabled={toggling[d.id]} style={{
+                                    padding: '12px 28px', borderRadius: 8, border: 'none', cursor: toggling[d.id] ? 'not-allowed' : 'pointer',
+                                    background: isOn ? d.warna : '#334155', color: '#fff', fontWeight: 600, fontSize: 12,
+                                    fontFamily: 'var(--font-mono)', letterSpacing: 1,
+                                    transition: 'all 0.3s ease',
+                                    boxShadow: isOn ? `0 0 16px ${d.warna}66` : 'none',
+                                    textTransform: 'uppercase',
+                                    opacity: toggling[d.id] ? 0.6 : 1,
+                                }}>
+                                    {toggling[d.id] ? '⏳ PROSES...' : (isOn ? '⏹ MATIKAN' : '▶ NYALAKAN')}
+                                </button>
                             </div>
                         )
                     })}
