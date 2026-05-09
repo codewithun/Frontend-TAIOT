@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable no-unused-vars */
 import { useState, useEffect } from 'react'
 import {
@@ -7,8 +6,99 @@ import {
 } from 'recharts'
 import { Zap, Activity, DollarSign, Leaf, TrendingUp } from 'lucide-react'
 import { StatCard, Panel, GaugeRing, ProgressBar, Badge } from '../components/UI.jsx'
-import { generateAlerts, perangkat } from '../data/mockData.js'
-import { getLatestPzem, getPzemHistory } from '../lib/api.js'
+import { generateAlerts } from '../data/mockData.js'
+import { getLatestPzem, getPzemHistory, getRelayState } from '../lib/api.js'
+
+const toNumber = (value, fallback = 0) => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : fallback
+}
+
+const readPzemMetric = (pzem = {}, keys = [], fallback = 0) => {
+    for (const key of keys) {
+        const value = pzem?.[key]
+        if (value !== undefined && value !== null && value !== '') {
+            return toNumber(value, fallback)
+        }
+    }
+    return fallback
+}
+
+const extractLivePzemMetrics = (data = {}) => {
+    const payload = data?.raw && typeof data.raw === 'object' ? data.raw : data
+    const root = payload?.pzem && typeof payload.pzem === 'object' ? payload.pzem : payload
+    const pzem1 = root?.pzem1 || payload?.pzem1 || {}
+    const pzem2 = root?.pzem2 || payload?.pzem2 || {}
+
+    const pzem1Power = readPzemMetric(pzem1, ['power', 'power_w', 'daya', 'p'])
+    const pzem2Power = readPzemMetric(pzem2, ['power', 'power_w', 'daya', 'p'])
+    const fallbackPower = readPzemMetric(root, ['total_daya', 'power', 'power_w', 'daya', 'p'])
+    const totalPower = pzem1Power + pzem2Power || fallbackPower
+
+    const pzem1Voltage = readPzemMetric(pzem1, ['voltage', 'tegangan', 'v'])
+    const pzem2Voltage = readPzemMetric(pzem2, ['voltage', 'tegangan', 'v'])
+    const averageVoltage = pzem1Voltage && pzem2Voltage
+        ? (pzem1Voltage + pzem2Voltage) / 2
+        : pzem1Voltage || pzem2Voltage || readPzemMetric(root, ['avg_tegangan', 'voltage', 'tegangan', 'v'])
+
+    const pzem1Current = readPzemMetric(pzem1, ['current', 'arus', 'i'])
+    const pzem2Current = readPzemMetric(pzem2, ['current', 'arus', 'i'])
+    const totalCurrent = pzem1Current + pzem2Current || readPzemMetric(root, ['total_arus', 'current', 'arus', 'i']) || (averageVoltage ? totalPower / averageVoltage : 0)
+
+    const pzem1Frequency = readPzemMetric(pzem1, ['frequency', 'frekuensi', 'f'])
+    const pzem2Frequency = readPzemMetric(pzem2, ['frequency', 'frekuensi', 'f'])
+    const frequency = pzem1Frequency && pzem2Frequency
+        ? (pzem1Frequency + pzem2Frequency) / 2
+        : pzem1Frequency || pzem2Frequency || readPzemMetric(root, ['avg_frekuensi', 'frequency', 'frekuensi', 'f'], 50)
+
+    const pzem1PowerFactor = readPzemMetric(pzem1, ['powerFactor', 'pf', 'factor'], 0.97)
+    const pzem2PowerFactor = readPzemMetric(pzem2, ['powerFactor', 'pf', 'factor'], 0.97)
+    const powerFactor = pzem1PowerFactor && pzem2PowerFactor
+        ? (pzem1PowerFactor + pzem2PowerFactor) / 2
+        : pzem1PowerFactor || pzem2PowerFactor || readPzemMetric(root, ['powerFactor', 'pf', 'factor'], 0.97)
+
+    return {
+        totalPower,
+        averageVoltage,
+        totalCurrent,
+        frequency,
+        powerFactor,
+        pzem1Power,
+        pzem2Power,
+        pzem1Voltage,
+        pzem2Voltage,
+        pzem1Current,
+        pzem2Current,
+    }
+}
+
+const buildRelayDevices = (relayState = {}, live = {}) => {
+    const relay1On = Boolean(relayState.relay1)
+    const relay2On = Boolean(relayState.relay2)
+    const relay1Power = readPzemMetric(live, ['pzem1Power'], 0)
+    const relay2Power = readPzemMetric(live, ['pzem2Power'], 0)
+
+    return [
+        {
+            id: 'relay-1',
+            nama: 'Relay 1',
+            ruang: 'Channel 1',
+            daya: relay1Power,
+            status: relay1On ? 'aktif' : 'nonaktif',
+            jam: relay1On ? 1 : 0,
+            warna: relay1On ? '#4ade80' : '#f87171',
+        },
+        {
+            id: 'relay-2',
+            nama: 'Relay 2',
+            ruang: 'Channel 2',
+            daya: relay2Power,
+            status: relay2On ? 'aktif' : 'nonaktif',
+            jam: relay2On ? 1 : 0,
+            warna: relay2On ? '#22d3ee' : '#f87171',
+        },
+    ]
+}
 
 const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null
@@ -27,7 +117,16 @@ const CustomTooltip = ({ active, payload, label }) => {
 export default function Dashboard() {
     const [hourly, setHourly] = useState([])
     const [currentPower, setCurrentPower] = useState(0)
+    const [currentCurrent, setCurrentCurrent] = useState(0)
     const [voltage, setVoltage] = useState(0)
+    const [electricalMetrics, setElectricalMetrics] = useState({
+        totalPower: 0,
+        totalCurrent: 0,
+        averageVoltage: 0,
+        frequency: 50,
+        powerFactor: 0.97,
+    })
+    const [relayDevices, setRelayDevices] = useState([])
     const [backendAvailable, setBackendAvailable] = useState(false)
     const [stats, setStats] = useState({
         dayKwh: 0,
@@ -43,18 +142,31 @@ export default function Dashboard() {
     const alerts = generateAlerts()
 
     useEffect(() => {
-        // Try fetch real data from backend; fall back to simulated updates
         let mounted = true
 
         const fetchOnce = async () => {
             try {
-                const latest = await getLatestPzem()
+                const [latest, relayState] = await Promise.all([getLatestPzem(), getRelayState()])
                 if (!mounted) return
                 if (latest?.success && latest.data) {
                     setBackendAvailable(true)
-                    const d = latest.data
-                    setCurrentPower(Math.round(d.power || d.power_w || 0))
-                    setVoltage(Math.round(d.voltage || 0))
+                    const live = extractLivePzemMetrics(latest.data)
+                    setCurrentPower(live.totalPower)
+                    setCurrentCurrent(live.totalCurrent)
+                    setVoltage(live.averageVoltage)
+                    setElectricalMetrics({
+                        totalPower: live.totalPower,
+                        totalCurrent: live.totalCurrent,
+                        averageVoltage: live.averageVoltage,
+                        frequency: live.frequency,
+                        powerFactor: live.powerFactor,
+                    })
+                    setRelayDevices(buildRelayDevices(relayState?.success ? relayState : {}, live))
+                    setStats(prev => ({
+                        ...prev,
+                        frequency: live.frequency,
+                        powerFactor: live.powerFactor,
+                    }))
                 }
 
                 const hist = await getPzemHistory(24)
@@ -80,8 +192,6 @@ export default function Dashboard() {
                     setStats(prev => ({
                         ...prev,
                         dayKwh: parseFloat(dailyKwh),
-                        frequency: parseFloat(avgFrequency.toFixed(2)),
-                        powerFactor: parseFloat(avgPf.toFixed(2)),
                         totalBiayaBulan: Math.round(dailyKwh * 30 * 1.444),
                         monthKwh: parseFloat(dailyKwh) * 30,
                         efficiency: Math.max(90, Math.min(99, 94 + (Math.random() - 0.5) * 5)),
@@ -94,19 +204,7 @@ export default function Dashboard() {
         }
 
         void fetchOnce()
-
-        // keep simulating small deltas when backend not available
-        const interval = setInterval(() => {
-            if (backendAvailable) return
-            setCurrentPower(prev => {
-                const delta = (Math.random() - 0.5) * 20
-                return Math.max(800, Math.min(2800, prev + delta))
-            })
-            setVoltage(prev => {
-                const delta = (Math.random() - 0.5) * 2
-                return Math.max(210, Math.min(230, prev + delta))
-            })
-        }, 2000)
+        const interval = setInterval(() => { void fetchOnce() }, 5000)
 
         return () => { mounted = false; clearInterval(interval) }
     }, [])
@@ -120,9 +218,9 @@ export default function Dashboard() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
                 <StatCard
                     label="Daya Saat Ini"
-                    value={Math.round(currentPower)}
+                    value={currentPower}
                     unit="W"
-                    sub="Konsumsi real-time"
+                    sub="PZEM 1 + PZEM 2"
                     color="cyan"
                     icon={Zap}
                     trend={5.2}
@@ -185,10 +283,10 @@ export default function Dashboard() {
                 {/* Gauges */}
                 <Panel title="Parameter Listrik">
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, justifyItems: 'center' }}>
-                        <GaugeRing value={Math.round(voltage)} max={240} label="Tegangan" unit="V" color="#22d3ee" size={110} />
-                        <GaugeRing value={parseFloat((currentPower / 220).toFixed(1))} max={20} label="Arus" unit="A" color="#4ade80" size={110} />
-                        <GaugeRing value={stats.frequency} max={60} label="Frekuensi" unit="Hz" color="#facc15" size={110} />
-                        <GaugeRing value={stats.powerFactor * 100} max={100} label="Power Factor" unit="PF" color="#a78bfa" size={110} />
+                        <GaugeRing value={electricalMetrics.averageVoltage || voltage} max={240} label="Tegangan" unit="V" color="#22d3ee" size={110} />
+                        <GaugeRing value={electricalMetrics.totalCurrent || currentCurrent} max={20} label="Arus" unit="A" color="#4ade80" size={110} />
+                        <GaugeRing value={electricalMetrics.frequency} max={60} label="Frekuensi" unit="Hz" color="#facc15" size={110} />
+                        <GaugeRing value={electricalMetrics.powerFactor * 100} max={100} label="Power Factor" unit="PF" color="#a78bfa" size={110} />
                     </div>
                 </Panel>
             </div>
@@ -199,7 +297,10 @@ export default function Dashboard() {
                 {/* Top perangkat */}
                 <Panel title="Perangkat Teratas">
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {perangkat.slice(0, 5).map(p => (
+                        {(relayDevices.length ? relayDevices : [
+                            { id: 'relay-1', nama: 'Relay 1', ruang: 'Channel 1', daya: 0, status: 'nonaktif', warna: '#f87171' },
+                            { id: 'relay-2', nama: 'Relay 2', ruang: 'Channel 2', daya: 0, status: 'nonaktif', warna: '#f87171' },
+                        ]).map(p => (
                             <div key={p.id}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                                     <div>

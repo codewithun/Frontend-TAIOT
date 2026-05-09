@@ -1,3 +1,11 @@
+const formatNumericValue = value => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return value
+    return new Intl.NumberFormat('id-ID', {
+        useGrouping: false,
+        maximumFractionDigits: 2,
+    }).format(value)
+}
+
 // ─── StatCard ────────────────────────────────────────────────────────────────
 export function StatCard({ label, value, unit, sub, color = 'cyan', icon: Icon, trend, style = {} }) {
     const colors = {
@@ -53,7 +61,7 @@ export function StatCard({ label, value, unit, sub, color = 'cyan', icon: Icon, 
 
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
                 <span style={{ fontSize: 32, fontWeight: 700, fontFamily: 'var(--font-mono)', color: c.text, lineHeight: 1 }}>
-                    {value}
+                    {formatNumericValue(value)}
                 </span>
                 {unit && <span style={{ fontSize: 13, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{unit}</span>}
             </div>
@@ -143,7 +151,7 @@ export function GaugeRing({ value, max = 100, label, unit, color = '#22d3ee', si
                     />
                 </svg>
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: size * 0.2, fontWeight: 700, color, lineHeight: 1 }}>{value}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: size * 0.2, fontWeight: 700, color, lineHeight: 1 }}>{formatNumericValue(value)}</span>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: size * 0.1, color: 'var(--text-muted)' }}>{unit}</span>
                 </div>
             </div>
