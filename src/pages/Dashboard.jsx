@@ -1,12 +1,11 @@
 /* eslint-disable no-unused-vars */
 import { useState, useEffect } from 'react'
 import {
-    AreaChart, Area,
-    XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
+    BarChart, Bar, Cell,
+    XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { Zap, Activity, DollarSign, Leaf, TrendingUp } from 'lucide-react'
-import { StatCard, Panel, GaugeRing, ProgressBar, Badge } from '../components/UI.jsx'
-import { generateAlerts } from '../data/mockData.js'
+import { Activity, DollarSign, TrendingUp, AlertTriangle, CircleCheckBig, Info } from 'lucide-react'
+import { StatCard, Panel, ProgressBar, Badge } from '../components/UI.jsx'
 import { getLatestPzem, getPzemHistory, getRelayState } from '../lib/api.js'
 
 const toNumber = (value, fallback = 0) => {
@@ -100,22 +99,81 @@ const buildRelayDevices = (relayState = {}, live = {}) => {
     ]
 }
 
-const CustomTooltip = ({ active, payload, label }) => {
+const WEEKDAY_ORDER = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']
+const WEEKDAY_BY_INDEX = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+
+const buildWeeklyUsage = (records = []) => {
+    const buckets = Object.fromEntries(WEEKDAY_ORDER.map(day => [day, 0]))
+
+    records.forEach(record => {
+        const rawDate = record?.serverTimestamp || record?.timestamp || Date.now()
+        const date = new Date(rawDate)
+        if (Number.isNaN(date.getTime())) return
+
+        const dayLabel = WEEKDAY_BY_INDEX[date.getDay()]
+        const nextValue = buckets[dayLabel] || 0
+        buckets[dayLabel] = nextValue + (toNumber(record?.power || record?.power_w || 0) / 1000)
+    })
+
+    return WEEKDAY_ORDER.map(day => ({
+        day,
+        kWh: Number(buckets[day].toFixed(2)),
+    }))
+}
+
+const WeeklyTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null
+
     return (
-        <div style={{ background: '#0d1220', border: '1px solid rgba(34,211,238,0.3)', borderRadius: 8, padding: '10px 14px' }}>
-            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#22d3ee', marginBottom: 6 }}>{label}</p>
-            {payload.map(p => (
-                <p key={p.name} style={{ fontSize: 12, color: p.color, fontFamily: 'var(--font-mono)' }}>
-                    {p.name}: {p.value} {p.name === 'konsumsi' ? 'W' : p.name === 'biaya' ? 'Rp' : ''}
-                </p>
-            ))}
+        <div style={{ background: '#ffffff', border: '1px solid #dfe7ef', borderRadius: 12, padding: '10px 14px', boxShadow: '0 10px 24px rgba(45, 60, 84, 0.12)' }}>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#5f88a8', marginBottom: 6 }}>{label}</p>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: '#ef5a09', fontWeight: 700 }}>
+                {payload[0]?.value ?? 0} kWh
+            </p>
         </div>
     )
 }
 
+const getUsageStatus = power => {
+    if (power < 1000) {
+        return {
+            tone: 'success',
+            label: 'Pemakaian Rendah',
+            title: 'Sangat Hemat',
+            detail: '< 1.000W',
+            color: '#1ca852',
+            bg: '#e8f5ed',
+            border: '#c1dfd4',
+            icon: CircleCheckBig,
+        }
+    }
+
+    if (power <= 2200) {
+        return {
+            tone: 'warning',
+            label: 'Pemakaian Normal',
+            title: 'Normal / Sedang',
+            detail: '1.000W - 2.200W',
+            color: '#b37f00',
+            bg: '#fffbf0',
+            border: '#f5e8c8',
+            icon: Info,
+        }
+    }
+
+    return {
+        tone: 'warning',
+        label: 'Pemakaian Tinggi',
+        title: 'Cukup Boros',
+        detail: '> 2.200W',
+        color: '#e56400',
+        bg: '#fef0e6',
+        border: '#f5d9b8',
+        icon: AlertTriangle,
+    }
+}
+
 export default function Dashboard() {
-    const [hourly, setHourly] = useState([])
     const [currentPower, setCurrentPower] = useState(0)
     const [currentCurrent, setCurrentCurrent] = useState(0)
     const [voltage, setVoltage] = useState(0)
@@ -128,6 +186,7 @@ export default function Dashboard() {
     })
     const [relayDevices, setRelayDevices] = useState([])
     const [backendAvailable, setBackendAvailable] = useState(false)
+    const [weeklyUsage, setWeeklyUsage] = useState(WEEKDAY_ORDER.map(day => ({ day, kWh: 0 })))
     const [stats, setStats] = useState({
         dayKwh: 0,
         monthKwh: 0,
@@ -139,14 +198,17 @@ export default function Dashboard() {
         dayTarget: 22,
         monthTarget: 450,
     })
-    const alerts = generateAlerts()
-
     useEffect(() => {
         let mounted = true
 
         const fetchOnce = async () => {
             try {
-                const [latest, relayState] = await Promise.all([getLatestPzem(), getRelayState()])
+                const [latest, relayState, dailyHist, weeklyHist] = await Promise.all([
+                    getLatestPzem(),
+                    getRelayState(),
+                    getPzemHistory(24),
+                    getPzemHistory(168),
+                ])
                 if (!mounted) return
                 if (latest?.success && latest.data) {
                     setBackendAvailable(true)
@@ -169,23 +231,11 @@ export default function Dashboard() {
                     }))
                 }
 
-                const hist = await getPzemHistory(24)
-                if (!mounted) return
-                if (hist?.success && Array.isArray(hist.data)) {
-                    // Convert history into hourly-like array and calculate stats
-                    const mapped = hist.data.slice(-24).map(h => ({
-                        time: new Date(h.serverTimestamp || h.timestamp || Date.now()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-                        konsumsi: Math.round(h.power || h.power_w || 0),
-                        biaya: Math.round((h.power || 0) * 1.444),
-                        tegangan: Math.round(h.voltage || 0),
-                        arus: parseFloat(((h.power || 0) / 220).toFixed(2)),
-                    }))
-                    if (mapped.length) setHourly(mapped)
-
+                if (dailyHist?.success && Array.isArray(dailyHist.data) && dailyHist.data.length) {
                     // Calculate daily stats from history
-                    const totalWh = hist.data.reduce((sum, h) => sum + (h.power || 0), 0)
-                    const avgFrequency = hist.data.reduce((sum, h) => sum + (h.frequency || 50), 0) / hist.data.length
-                    const avgPf = hist.data.reduce((sum, h) => sum + (h.powerFactor || 0.97), 0) / hist.data.length
+                    const totalWh = dailyHist.data.reduce((sum, h) => sum + (h.power || 0), 0)
+                    const avgFrequency = dailyHist.data.reduce((sum, h) => sum + (h.frequency || 50), 0) / dailyHist.data.length
+                    const avgPf = dailyHist.data.reduce((sum, h) => sum + (h.powerFactor || 0.97), 0) / dailyHist.data.length
                     const dailyKwh = (totalWh / 1000).toFixed(1)
                     const dailyCost = Math.round(totalWh * 1.444 / 1000)
 
@@ -198,6 +248,10 @@ export default function Dashboard() {
                         co2: parseFloat((dailyKwh * 0.3).toFixed(2)),
                     }))
                 }
+
+                if (weeklyHist?.success && Array.isArray(weeklyHist.data)) {
+                    setWeeklyUsage(buildWeeklyUsage(weeklyHist.data.slice(-168)))
+                }
             } catch (err) {
                 // ignore — keep simulated data
             }
@@ -209,22 +263,14 @@ export default function Dashboard() {
         return () => { mounted = false; clearInterval(interval) }
     }, [])
 
-    const alertColors = { warning: 'warning', info: 'info', success: 'success', error: 'error' }
+    const usageStatus = getUsageStatus(currentPower)
+    const weeklyPeak = Math.max(...weeklyUsage.map(item => item.kWh), 0)
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
             {/* Stat cards row */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-                <StatCard
-                    label="Daya Saat Ini"
-                    value={currentPower}
-                    unit="W"
-                    sub="PZEM 1 + PZEM 2"
-                    color="cyan"
-                    icon={Zap}
-                    trend={5.2}
-                />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
                 <StatCard
                     label="Konsumsi Hari Ini"
                     value={stats.dayKwh}
@@ -252,47 +298,96 @@ export default function Dashboard() {
                 />
             </div>
 
-            {/* Main row: chart + gauges */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
+            <Panel title="Konsumsi Energi 24 Jam" headerRight={
+                <Badge type={usageStatus.tone}>{usageStatus.label}</Badge>
+            }>
+                <div style={{
+                    background: 'linear-gradient(180deg, #ffffff 0%, #fbfbfd 100%)',
+                    border: '1px solid #e9edf3',
+                    borderRadius: 24,
+                    boxShadow: '0 20px 40px rgba(45, 60, 84, 0.08)',
+                    padding: '34px 24px 28px',
+                }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'clamp(54px, 7vw, 94px)', fontWeight: 800, color: '#ef5a09', lineHeight: 1 }}>
+                                {new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(currentPower)}
+                            </span>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'clamp(20px, 2.2vw, 38px)', fontWeight: 700, color: '#f17c47' }}>
+                                WATT
+                            </span>
+                        </div>
 
-                {/* Area Chart konsumsi */}
-                <Panel title="Konsumsi Energi 24 Jam" headerRight={
-                    <div style={{ display: 'flex', gap: 8 }}>
-                        <Badge type="info">Watt</Badge>
-                        <Badge type="success">Hari Ini</Badge>
+                        <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            borderRadius: 999,
+                            fontFamily: 'var(--font-mono)',
+                            fontWeight: 700,
+                            letterSpacing: 0.6,
+                            textTransform: 'uppercase',
+                            padding: '10px 18px',
+                            border: `1px solid ${usageStatus.border}`,
+                            background: usageStatus.bg,
+                            color: usageStatus.color,
+                        }}>
+                            <usageStatus.icon size={16} />
+                            {usageStatus.title}
+                        </div>
                     </div>
-                }>
-                    <ResponsiveContainer width="100%" height={260}>
-                        <AreaChart data={hourly} margin={{ top: 5, right: 5, bottom: 0, left: -10 }}>
-                            <defs>
-                                <linearGradient id="gradCyan" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.3} />
-                                    <stop offset="95%" stopColor="#22d3ee" stopOpacity={0} />
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="4 4" />
-                            <XAxis dataKey="time" tick={{ fill: '#475569', fontSize: 10, fontFamily: 'Share Tech Mono' }} interval={3} />
-                            <YAxis tick={{ fill: '#475569', fontSize: 10, fontFamily: 'Share Tech Mono' }} />
-                            <Tooltip content={<CustomTooltip />} />
-                            <ReferenceLine y={250} stroke="#facc15" strokeDasharray="4 4" strokeOpacity={0.5} />
-                            <Area type="monotone" dataKey="konsumsi" stroke="#22d3ee" strokeWidth={2} fill="url(#gradCyan)" dot={false} />
-                        </AreaChart>
-                    </ResponsiveContainer>
-                </Panel>
 
-                {/* Gauges */}
-                <Panel title="Parameter Listrik">
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, justifyItems: 'center' }}>
-                        <GaugeRing value={electricalMetrics.averageVoltage || voltage} max={240} label="Tegangan" unit="V" color="#22d3ee" size={110} />
-                        <GaugeRing value={electricalMetrics.totalCurrent || currentCurrent} max={20} label="Arus" unit="A" color="#4ade80" size={110} />
-                        <GaugeRing value={electricalMetrics.frequency} max={60} label="Frekuensi" unit="Hz" color="#facc15" size={110} />
-                        <GaugeRing value={electricalMetrics.powerFactor * 100} max={100} label="Power Factor" unit="PF" color="#a78bfa" size={110} />
+                    <div style={{ marginTop: 34 }}>
+                        <div style={{ position: 'relative', height: 14, borderRadius: 999, overflow: 'hidden', background: '#e6eaef', display: 'grid', gridTemplateColumns: '33% 33% 25% 9%' }}>
+                            <div style={{ background: 'linear-gradient(90deg, #2ac65c, #71d35a)' }} />
+                            <div style={{ background: 'linear-gradient(90deg, #f0cc2d, #f9b82f)' }} />
+                            <div style={{ background: 'linear-gradient(90deg, #ff9c35, #ff7a10)' }} />
+                            <div style={{ background: '#e5e7eb' }} />
+                            <div style={{
+                                position: 'absolute',
+                                top: -5,
+                                left: `${Math.min((currentPower / 3000) * 100, 100)}%`,
+                                transform: 'translateX(-50%)',
+                                width: 6,
+                                height: 24,
+                                borderRadius: 999,
+                                background: '#ffffff',
+                                boxShadow: '0 0 0 2px rgba(25,25,25,0.18), 0 3px 10px rgba(0,0,0,0.15)',
+                            }} />
+                        </div>
+
+                        <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 18 }}>
+                            <div style={{ textAlign: 'left' }}>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, letterSpacing: 1, color: '#1ca852', textTransform: 'uppercase', fontSize: 'clamp(12px, 1.1vw, 18px)' }}>
+                                    Sangat Hemat
+                                </div>
+                                <div style={{ color: '#9ca3af', fontSize: 'clamp(11px, 0.95vw, 15px)', marginTop: 2 }}>
+                                    &lt; 1.000W
+                                </div>
+                            </div>
+                            <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, letterSpacing: 1, color: '#b37f00', textTransform: 'uppercase', fontSize: 'clamp(12px, 1.1vw, 18px)' }}>
+                                    Normal / Sedang
+                                </div>
+                                <div style={{ color: '#9ca3af', fontSize: 'clamp(11px, 0.95vw, 15px)', marginTop: 2 }}>
+                                    1.000W - 2.200W
+                                </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, letterSpacing: 1, color: '#e56400', textTransform: 'uppercase', fontSize: 'clamp(12px, 1.1vw, 18px)' }}>
+                                    Cukup Boros
+                                </div>
+                                <div style={{ color: '#9ca3af', fontSize: 'clamp(11px, 0.95vw, 15px)', marginTop: 2 }}>
+                                    &gt; 2.200W
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </Panel>
-            </div>
+                </div>
+            </Panel>
 
-            {/* Bottom row: devices + alerts + monthly progress */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 320px', gap: 16 }}>
+            {/* Bottom row: devices + weekly usage */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.15fr', gap: 16 }}>
 
                 {/* Top perangkat */}
                 <Panel title="Perangkat Teratas">
@@ -318,55 +413,53 @@ export default function Dashboard() {
                     </div>
                 </Panel>
 
-                {/* Alerts */}
-                <Panel title="Peringatan & Notifikasi">
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {alerts.map(a => (
-                            <div key={a.id} style={{
-                                padding: '10px 14px', borderRadius: 8,
-                                background: a.type === 'error' ? 'rgba(248,113,113,0.08)' : a.type === 'warning' ? 'rgba(250,204,21,0.08)' : a.type === 'success' ? 'rgba(74,222,128,0.08)' : 'rgba(34,211,238,0.08)',
-                                border: `1px solid ${a.type === 'error' ? 'rgba(248,113,113,0.2)' : a.type === 'warning' ? 'rgba(250,204,21,0.2)' : a.type === 'success' ? 'rgba(74,222,128,0.2)' : 'rgba(34,211,238,0.2)'}`,
-                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            }}>
-                                <div style={{ flex: 1 }}>
-                                    <p style={{ fontSize: 12, color: 'var(--text-primary)', marginBottom: 2 }}>{a.msg}</p>
-                                    <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{a.time}</span>
-                                </div>
-                                <Badge type={alertColors[a.type]}>{a.type}</Badge>
-                            </div>
-                        ))}
-                    </div>
-                </Panel>
-
-                {/* Monthly summary */}
-                <Panel title="Progres Bulanan">
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                        <div style={{ textAlign: 'center', padding: '8px 0' }}>
-                            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 36, color: '#facc15', fontWeight: 700 }}>
-                                {stats.monthKwh.toFixed(1)}
-                            </div>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>kWh bulan ini</div>
+                {/* Weekly usage */}
+                <Panel title="Pemakaian Harian 7 Hari Terakhir" headerRight={<Badge type="info">Senin - Minggu</Badge>}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
+                                Perbandingan pemakaian listrik selama 7 hari terakhir.
+                            </p>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase' }}>
+                                kWh / hari
+                            </span>
                         </div>
 
-                        <ProgressBar value={stats.monthKwh} max={stats.monthTarget} color="#facc15" label="Target Bulan Ini" valueLabel={`${stats.monthKwh.toFixed(1)}/${stats.monthTarget} kWh`} />
+                        <ResponsiveContainer width="100%" height={280}>
+                            <BarChart data={weeklyUsage} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                                <XAxis dataKey="day" tick={{ fill: '#475569', fontSize: 10, fontFamily: 'Share Tech Mono' }} />
+                                <YAxis tick={{ fill: '#475569', fontSize: 10, fontFamily: 'Share Tech Mono' }} />
+                                <Tooltip content={<WeeklyTooltip />} />
+                                <Bar dataKey="kWh" radius={[8, 8, 0, 0]} barSize={28}>
+                                    {weeklyUsage.map((entry, index) => (
+                                        <Cell
+                                            key={`${entry.day}-${index}`}
+                                            fill={entry.kWh === weeklyPeak && weeklyPeak > 0 ? '#ef5a09' : '#5f88a8'}
+                                        />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
 
-                        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                            {[
-                                { label: 'Estimasi Tagihan', value: `Rp ${stats.totalBiayaBulan.toLocaleString('id-ID')}`, color: '#facc15' },
-                                { label: 'Penghematan vs Bulan Lalu', value: '- Rp 43.000', color: '#4ade80' },
-                                { label: 'Emisi CO₂', value: `${stats.co2} ton`, color: '#94a3b8' },
-                                { label: 'Efisiensi', value: `${Math.round(stats.efficiency)}%`, color: '#a78bfa' },
-                            ].map(item => (
-                                <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{item.label}</span>
-                                    <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: item.color }}>{item.value}</span>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+                            <div style={{ padding: '10px 12px', borderRadius: 10, background: '#edf4fa', border: '1px solid var(--border)' }}>
+                                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>Puncak</div>
+                                <div style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: 'var(--text-accent)', fontWeight: 700 }}>
+                                    {weeklyPeak.toFixed(2)} kWh
                                 </div>
-                            ))}
-                        </div>
-
-                        <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <Leaf size={14} color="#4ade80" />
-                            <span style={{ fontSize: 11, color: '#4ade80' }}>Dalam batas hemat energi!</span>
+                            </div>
+                            <div style={{ padding: '10px 12px', borderRadius: 10, background: '#edf4fa', border: '1px solid var(--border)' }}>
+                                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>Hari Tertinggi</div>
+                                <div style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: 'var(--text-accent)', fontWeight: 700 }}>
+                                    {weeklyUsage.find(item => item.kWh === weeklyPeak)?.day || '-'}
+                                </div>
+                            </div>
+                            <div style={{ padding: '10px 12px', borderRadius: 10, background: '#edf4fa', border: '1px solid var(--border)' }}>
+                                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>Total 7 Hari</div>
+                                <div style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: 'var(--text-accent)', fontWeight: 700 }}>
+                                    {weeklyUsage.reduce((sum, item) => sum + item.kWh, 0).toFixed(2)} kWh
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </Panel>

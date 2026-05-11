@@ -60,7 +60,7 @@ export default function App() {
 
         {/* Footer bar */}
         <div style={{
-          height: 32, background: 'var(--bg-panel)', borderTop: '1px solid var(--border)',
+          height: 32, background: '#eef4f9', borderTop: '1px solid var(--border)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '0 24px',
         }}>

@@ -1,40 +1,40 @@
 :root {
-  --bg-void: #050810;
-  --bg-panel: #090d18;
-  --bg-card: #0d1220;
-  --bg-card-hover: #111827;
-  --bg-glass: rgba(13, 18, 32, 0.85);
+  --bg-void: #f7f8fa;
+  --bg-panel: #d4e4f0;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f2f6fb;
+  --bg-glass: rgba(255, 255, 255, 0.92);
 
-  --border: rgba(56, 189, 248, 0.12);
-  --border-accent: rgba(56, 189, 248, 0.3);
-  --border-glow: rgba(74, 222, 128, 0.4);
+  --border: #c6d9e8;
+  --border-accent: #a6c3d8;
+  --border-glow: rgba(127, 158, 182, 0.28);
 
-  --neon-green: #4ade80;
-  --neon-green-dim: rgba(74, 222, 128, 0.15);
-  --neon-cyan: #22d3ee;
-  --neon-cyan-dim: rgba(34, 211, 238, 0.12);
-  --neon-yellow: #facc15;
-  --neon-yellow-dim: rgba(250, 204, 21, 0.12);
-  --neon-red: #f87171;
-  --neon-red-dim: rgba(248, 113, 113, 0.12);
-  --neon-purple: #a78bfa;
-  --neon-orange: #fb923c;
+  --neon-green: #4b9b75;
+  --neon-green-dim: rgba(75, 155, 117, 0.12);
+  --neon-cyan: #5f88a8;
+  --neon-cyan-dim: rgba(95, 136, 168, 0.12);
+  --neon-yellow: #ca9a4f;
+  --neon-yellow-dim: rgba(202, 154, 79, 0.12);
+  --neon-red: #cd6d5b;
+  --neon-red-dim: rgba(205, 109, 91, 0.12);
+  --neon-purple: #7f8fa7;
+  --neon-orange: #c58a4d;
 
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #475569;
-  --text-accent: #22d3ee;
+  --text-primary: #2b3340;
+  --text-secondary: #576579;
+  --text-muted: #7f8ea1;
+  --text-accent: #4d7594;
 
-  --font-display: 'Orbitron', monospace;
-  --font-body: 'Exo 2', sans-serif;
-  --font-mono: 'Share Tech Mono', monospace;
+  --font-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
 
   --radius: 8px;
   --radius-lg: 12px;
 
-  --shadow-glow-green: 0 0 20px rgba(74, 222, 128, 0.2), 0 0 40px rgba(74, 222, 128, 0.08);
-  --shadow-glow-cyan: 0 0 20px rgba(34, 211, 238, 0.2), 0 0 40px rgba(34, 211, 238, 0.08);
-  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.6);
+  --shadow-glow-green: 0 6px 16px rgba(75, 155, 117, 0.15);
+  --shadow-glow-cyan: 0 8px 18px rgba(95, 136, 168, 0.16);
+  --shadow-card: 0 10px 24px rgba(73, 95, 120, 0.08);
 }
 
 *, *::before, *::after {
@@ -50,7 +50,7 @@ html {
 
 body {
   font-family: var(--font-body);
-  background-color: var(--bg-void);
+  background: linear-gradient(180deg, #f7f8fa 0%, #eef4f9 100%);
   color: var(--text-primary);
   min-height: 100vh;
   overflow-x: hidden;
@@ -59,9 +59,9 @@ body {
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-panel); }
-::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.3); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.5); }
+::-webkit-scrollbar-track { background: #e8eef4; }
+::-webkit-scrollbar-thumb { background: #bfd1df; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #a8bfd1; }
 
 /* Animations */
 @keyframes pulse-glow {
@@ -108,12 +108,13 @@ body {
   position: fixed;
   inset: 0;
   background-image:
-    linear-gradient(rgba(34, 211, 238, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(34, 211, 238, 0.04) 1px, transparent 1px);
+    linear-gradient(rgba(122, 153, 180, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(122, 153, 180, 0.08) 1px, transparent 1px);
   background-size: 40px 40px;
   pointer-events: none;
   z-index: 0;
-  animation: grid-flash 8s ease-in-out infinite;
+  opacity: 0.3;
+  animation: grid-flash 14s ease-in-out infinite;
 }
 
 /* Scan line effect */
@@ -123,8 +124,9 @@ body {
   left: 0;
   right: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.3), transparent);
+  background: linear-gradient(90deg, transparent, rgba(112, 147, 171, 0.3), transparent);
   z-index: 1;
-  animation: scan-line 6s linear infinite;
+  animation: scan-line 10s linear infinite;
   pointer-events: none;
+  opacity: 0.35;
 }
