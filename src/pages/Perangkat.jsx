@@ -125,11 +125,12 @@ export default function Perangkat() {
 
     const handleToggle = async (device) => {
         const nextStatus = device.status === 'aktif' ? 'nonaktif' : 'aktif'
+        const nextStatusBool = nextStatus === 'aktif'
 
         setToggling(prev => ({ ...prev, [device.id]: true }))
 
         try {
-            const res = await updateRelayDevice(device.id, { status: nextStatus })
+            const res = await updateRelayDevice(device.id, { status: nextStatusBool })
 
             if (!res?.success || !res.device) {
                 throw new Error(res?.message || 'Gagal mengubah status relay')
@@ -142,7 +143,7 @@ export default function Perangkat() {
             if (device.isBuiltin && device.relayKey) {
                 try {
                     const payload = {}
-                    payload[device.relayKey] = nextStatus === 'aktif'
+                    payload[device.relayKey] = nextStatusBool
                     const apiRes = await setRelayState(payload)
                     if (apiRes?.success || apiRes) {
                         setDevices(prev => prev.map(item => item.id === device.id ? { ...item, status: nextStatus } : item))
