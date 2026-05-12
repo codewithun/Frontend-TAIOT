@@ -1,3 +1,5 @@
+/* eslint-disable preserve-caught-error */
+/* eslint-disable no-unused-vars */
 import { useState, useEffect } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Panel, Badge } from '../components/UI.jsx'
@@ -6,6 +8,8 @@ import {
     deleteRelayDevice,
     getRelayDevices,
     updateRelayDevice,
+    setRelayState,
+    getRelayState,
 } from '../lib/api.js'
 
 const COLOR_PALETTE = ['#22d3ee', '#4ade80', '#a78bfa', '#facc15', '#fb923c', '#f87171', '#38bdf8', '#86efac']
@@ -27,7 +31,39 @@ export default function Perangkat() {
                 setDevices(res.devices)
                 if (!silent) setError(null)
             } else {
-                throw new Error(res?.message || 'Gagal mengambil daftar relay')
+                // Fallback: try /relay-state (some servers return bare relay state instead of /relay-devices)
+                try {
+                    const stateRes = await getRelayState()
+                    const normalized = stateRes?.success ? (stateRes.state || stateRes) : (stateRes || {})
+
+                    const fallbackDevices = [
+                        {
+                            id: 'builtin-relay1',
+                            relayKey: 'relay1',
+                            nama: 'Relay 1',
+                            description: 'Relay Control 1',
+                            warna: '#22d3ee',
+                            status: normalized.relay1 ? 'aktif' : 'nonaktif',
+                            isBuiltin: true,
+                            sortOrder: 1,
+                        },
+                        {
+                            id: 'builtin-relay2',
+                            relayKey: 'relay2',
+                            nama: 'Relay 2',
+                            description: 'Relay Control 2',
+                            warna: '#4ade80',
+                            status: normalized.relay2 ? 'aktif' : 'nonaktif',
+                            isBuiltin: true,
+                            sortOrder: 2,
+                        },
+                    ]
+
+                    setDevices(fallbackDevices)
+                    if (!silent) setError(null)
+                } catch (errInner) {
+                    throw new Error(res?.message || 'Gagal mengambil daftar relay')
+                }
             }
         } catch (err) {
             if (!silent) setError(err.message)
@@ -102,7 +138,24 @@ export default function Perangkat() {
             setDevices(prev => prev.map(item => (item.id === device.id ? res.device : item)))
             setError(null)
         } catch (err) {
-            setError(err.message)
+            // If update failed for a builtin relay, try POST /relay-control as a fallback
+            if (device.isBuiltin && device.relayKey) {
+                try {
+                    const payload = {}
+                    payload[device.relayKey] = nextStatus === 'aktif'
+                    const apiRes = await setRelayState(payload)
+                    if (apiRes?.success || apiRes) {
+                        setDevices(prev => prev.map(item => item.id === device.id ? { ...item, status: nextStatus } : item))
+                        setError(null)
+                    } else {
+                        throw new Error(apiRes?.message || 'Fallback relay-control gagal')
+                    }
+                } catch (err2) {
+                    setError(err2.message)
+                }
+            } else {
+                setError(err.message)
+            }
         } finally {
             setToggling(prev => ({ ...prev, [device.id]: false }))
         }

@@ -223,7 +223,12 @@ export default function Dashboard() {
                         frequency: live.frequency,
                         powerFactor: live.powerFactor,
                     })
-                    setRelayDevices(buildRelayDevices(relayState?.success ? relayState : {}, live))
+                    // Normalize relayState shape: accept { success, state, ... } or bare { relay1, relay2, relays }
+                    const normalizedRelay = relayState?.success
+                        ? (relayState.state || relayState)
+                        : (relayState || {})
+
+                    setRelayDevices(buildRelayDevices(normalizedRelay, live))
                     setStats(prev => ({
                         ...prev,
                         frequency: live.frequency,
