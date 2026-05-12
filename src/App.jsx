@@ -41,9 +41,7 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-void)' }}>
-      {/* Atmospheric effects */}
-      <div className="grid-bg" />
-      <div className="scan-line" />
+      {/* Atmospheric effects removed per request */}
 
       {/* Sidebar */}
       <Sidebar active={page} onNav={setPage} />

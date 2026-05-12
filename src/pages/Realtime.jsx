@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { Panel, GaugeRing, Badge } from '../components/UI.jsx'
+import { Zap } from 'lucide-react'
+import { Panel, Badge } from '../components/UI.jsx'
 import { getLatestPzem } from '../lib/api.js'
 
 function toNumber(value, fallback = 0) {
@@ -48,6 +49,24 @@ function formatRealtimePoint(payload = {}) {
         avg_tegangan: (p1Voltage + p2Voltage) / (p2Voltage > 0 ? 2 : 1),
         total_arus: p1Current + p2Current,
         avg_frekuensi: (p1Frequency + p2Frequency) / (p2Frequency > 0 ? 2 : 1),
+        pzem1: {
+            voltage: p1Voltage,
+            current: p1Current,
+            power: p1Power,
+            energy: toNumber(pzem1.energy, 0),
+            frequency: p1Frequency,
+            powerFactor: toNumber(pzem1.powerFactor ?? pzem1.pf, 0.97),
+            ok: Boolean(pzem1.ok),
+        },
+        pzem2: {
+            voltage: p2Voltage,
+            current: p2Current,
+            power: p2Power,
+            energy: toNumber(pzem2.energy, 0),
+            frequency: p2Frequency,
+            powerFactor: toNumber(pzem2.powerFactor ?? pzem2.pf, 0.97),
+            ok: Boolean(pzem2.ok),
+        },
     }
 }
 
@@ -59,6 +78,138 @@ const CustomTooltip = ({ active, payload, label }) => {
             {payload.map(p => (
                 <p key={p.name} style={{ fontSize: 11, color: p.color, fontFamily: 'var(--font-mono)' }}>{p.name}: {p.value}</p>
             ))}
+        </div>
+    )
+}
+
+const formatCardNumber = (value, digits = 1) => {
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed)) return '0'
+    return new Intl.NumberFormat('id-ID', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: digits,
+    }).format(parsed)
+}
+
+const getPzemCardReading = (latest = {}, key = 'pzem1') => {
+    const source = latest?.[key] || {}
+    return {
+        voltage: toNumber(source.voltage ?? 0, 0),
+        current: toNumber(source.current ?? 0, 0),
+        power: toNumber(source.power ?? 0, 0),
+        energy: toNumber(source.energy ?? 0, 0),
+        frequency: toNumber(source.frequency ?? 0, 50),
+        powerFactor: toNumber(source.powerFactor ?? 0.97, 0.97),
+        ok: Boolean(source.ok),
+    }
+}
+
+const PzemMetric = ({ label, value, unit, digits = 1, accent = '#5f88a8', valueColor = accent }) => (
+    <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#111111', marginBottom: 6 }}>
+            {label}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'clamp(24px, 2.2vw, 34px)',
+                fontWeight: 800,
+                lineHeight: 1,
+                color: valueColor,
+            }}>
+                {formatCardNumber(value, digits)}
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: '#111111', letterSpacing: 0.5 }}>
+                {unit}
+            </span>
+        </div>
+    </div>
+)
+
+const PzemCard = ({ title, subtitle, icon: Icon, reading }) => {
+    const live = reading?.ok ? 'LIVE' : 'STANDBY'
+    return (
+        <div style={{
+            position: 'relative',
+            borderRadius: 18,
+            overflow: 'hidden',
+            border: '1px solid var(--border)',
+            background: 'var(--bg-card)',
+            boxShadow: 'var(--shadow-card)',
+            minHeight: 280,
+        }}>
+            <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at top right, rgba(95,136,168,0.08), transparent 36%)', pointerEvents: 'none' }} />
+
+            <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 16,
+                padding: '18px 18px 16px',
+                borderBottom: '1px solid var(--border)',
+                position: 'relative',
+                zIndex: 1,
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+                    <div style={{
+                        width: 52,
+                        height: 52,
+                        borderRadius: 15,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'linear-gradient(180deg, #f8fbfd, #edf4fa)',
+                        border: '1px solid #d6e2ee',
+                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.85), 0 8px 18px rgba(95,136,168,0.10)',
+                        color: '#5f88a8',
+                        flexShrink: 0,
+                    }}>
+                        <Icon size={24} />
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 800, color: '#111111', letterSpacing: 0.6 }}>
+                            {title}
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#111111', letterSpacing: 0.8, textTransform: 'uppercase' }}>
+                            {subtitle}
+                        </div>
+                    </div>
+                </div>
+
+                <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '7px 14px',
+                    borderRadius: 999,
+                    background: '#edf4fa',
+                    border: '1px solid #d6e2ee',
+                    color: '#111111',
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 800,
+                    letterSpacing: 1.1,
+                    textTransform: 'uppercase',
+                    whiteSpace: 'nowrap',
+                    boxShadow: '0 6px 12px rgba(95,136,168,0.08)',
+                }}>
+                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#111111', boxShadow: '0 0 0 4px rgba(17,17,17,0.12)', animation: 'pulse-glow 1.8s ease-in-out infinite' }} />
+                    {live}
+                </div>
+            </div>
+
+            <div style={{ position: 'relative', zIndex: 1, padding: 18 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 18 }}>
+                    <PzemMetric label="Tegangan" value={reading.voltage} unit="V" digits={1} valueColor="#111111" />
+                    <PzemMetric label="Arus" value={reading.current} unit="A" digits={2} valueColor="#111111" />
+                    <PzemMetric label="Daya Aktif" value={reading.power} unit="W" digits={0} valueColor="#111111" />
+                </div>
+
+                <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid var(--border)', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 18 }}>
+                    <PzemMetric label="Energi" value={reading.energy} unit="kWh" digits={1} valueColor="#111111" />
+                    <PzemMetric label="Frekuensi" value={reading.frequency} unit="Hz" digits={2} valueColor="#111111" />
+                    <PzemMetric label="Faktor Daya" value={reading.powerFactor} unit="PF" digits={2} valueColor="#111111" />
+                </div>
+            </div>
         </div>
     )
 }
@@ -81,6 +232,8 @@ export default function Realtime() {
     })
     const [paused, setPaused] = useState(false)
     const [error, setError] = useState(null)
+    const pzem1Reading = getPzemCardReading(latest, 'pzem1')
+    const pzem2Reading = getPzemCardReading(latest, 'pzem2')
 
     useEffect(() => {
         if (paused) return
@@ -158,23 +311,19 @@ export default function Realtime() {
                 ))}
             </div>
 
-            {/* Gauges */}
+            {/* PZEM cards */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <Panel title="Gauge Panel PZEM1">
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, padding: '8px 0' }}>
-                        <GaugeRing value={latest.pzem1_daya} max={3000} label="PZEM1 Daya" unit="W" color="#22d3ee" size={120} />
-                        <GaugeRing value={latest.pzem1_tegangan} max={250} label="PZEM1 Tegangan" unit="V" color="#4ade80" size={120} />
-                        <GaugeRing value={latest.pzem1_arus} max={20} label="PZEM1 Arus" unit="A" color="#fbbf24" size={120} />
-                    </div>
-                </Panel>
+                <PzemCard
+                    title="PZEM 01"
+                    icon={Zap}
+                    reading={pzem1Reading}
+                />
 
-                <Panel title="Gauge Panel PZEM2">
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, padding: '8px 0' }}>
-                        <GaugeRing value={latest.pzem2_daya} max={3000} label="PZEM2 Daya" unit="W" color="#38bdf8" size={120} />
-                        <GaugeRing value={latest.pzem2_tegangan} max={250} label="PZEM2 Tegangan" unit="V" color="#10b981" size={120} />
-                        <GaugeRing value={latest.pzem2_arus} max={20} label="PZEM2 Arus" unit="A" color="#fbbf24" size={120} />
-                    </div>
-                </Panel>
+                <PzemCard
+                    title="PZEM 02"
+                    icon={Zap}
+                    reading={pzem2Reading}
+                />
             </div>
 
             {/* Rolling charts */}
@@ -183,8 +332,8 @@ export default function Realtime() {
                     <ResponsiveContainer width="100%" height={180}>
                         <LineChart data={data} margin={{ top: 5, right: 5, bottom: 0, left: -10 }}>
                             <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="4 4" />
-                            <XAxis dataKey="time" tick={{ fill: '#475569', fontSize: 9, fontFamily: 'Share Tech Mono' }} interval={9} />
-                            <YAxis domain={['auto', 'auto']} tick={{ fill: '#475569', fontSize: 9, fontFamily: 'Share Tech Mono' }} />
+                            <XAxis dataKey="time" tick={{ fill: '#475569', fontSize: 9, fontFamily: 'Inter' }} interval={9} />
+                            <YAxis domain={['auto', 'auto']} tick={{ fill: '#475569', fontSize: 9, fontFamily: 'Inter' }} />
                             <Tooltip content={<CustomTooltip />} />
                             <Line type="monotone" dataKey="pzem1_daya" stroke="#22d3ee" strokeWidth={1.5} dot={false} isAnimationActive={false} name="PZEM1 Daya" />
                             <Line type="monotone" dataKey="pzem2_daya" stroke="#38bdf8" strokeWidth={1.5} dot={false} isAnimationActive={false} name="PZEM2 Daya" />
@@ -196,8 +345,8 @@ export default function Realtime() {
                     <ResponsiveContainer width="100%" height={180}>
                         <LineChart data={data} margin={{ top: 5, right: 5, bottom: 0, left: -10 }}>
                             <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="4 4" />
-                            <XAxis dataKey="time" tick={{ fill: '#475569', fontSize: 9, fontFamily: 'Share Tech Mono' }} interval={9} />
-                            <YAxis domain={[205, 235]} tick={{ fill: '#475569', fontSize: 9, fontFamily: 'Share Tech Mono' }} />
+                            <XAxis dataKey="time" tick={{ fill: '#475569', fontSize: 9, fontFamily: 'Inter' }} interval={9} />
+                            <YAxis domain={[205, 235]} tick={{ fill: '#475569', fontSize: 9, fontFamily: 'Inter' }} />
                             <Tooltip content={<CustomTooltip />} />
                             <Line type="monotone" dataKey="pzem1_tegangan" stroke="#4ade80" strokeWidth={1.5} dot={false} isAnimationActive={false} name="PZEM1 Tegangan" />
                             <Line type="monotone" dataKey="pzem2_tegangan" stroke="#86efac" strokeWidth={1.5} dot={false} isAnimationActive={false} name="PZEM2 Tegangan" />

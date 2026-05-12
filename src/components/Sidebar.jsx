@@ -1,10 +1,9 @@
-import { Zap, LayoutDashboard, Cpu, Settings, Activity } from 'lucide-react'
+import { Zap, LayoutDashboard, Cpu, Activity } from 'lucide-react'
 
 const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'realtime', label: 'Real-Time', icon: Activity },
     { id: 'perangkat', label: 'Perangkat', icon: Cpu },
-    { id: 'settings', label: 'Pengaturan', icon: Settings },
 ]
 
 export default function Sidebar({ active, onNav }) {

@@ -1,5 +1,5 @@
 .dash-layout {
-  --dash-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --dash-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --dash-bg-soft: #f8f9fb;
   --dash-bg-panel: #fafbfd;
   --dash-border: #e0e4e8;

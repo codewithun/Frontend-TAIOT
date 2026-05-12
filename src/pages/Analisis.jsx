@@ -64,8 +64,8 @@ export default function Analisis() {
                     <ResponsiveContainer width="100%" height={240}>
                         <ComposedChart data={daily} margin={{ top: 5, right: 5, bottom: 0, left: -10 }}>
                             <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="4 4" />
-                            <XAxis dataKey="day" tick={{ fill: '#475569', fontSize: 10, fontFamily: 'Share Tech Mono' }} />
-                            <YAxis tick={{ fill: '#475569', fontSize: 10, fontFamily: 'Share Tech Mono' }} />
+                            <XAxis dataKey="day" tick={{ fill: '#475569', fontSize: 10, fontFamily: 'Inter' }} />
+                            <YAxis tick={{ fill: '#475569', fontSize: 10, fontFamily: 'Inter' }} />
                             <Tooltip content={<CustomTooltip />} />
                             <ReferenceLine y={4500} stroke="#facc15" strokeDasharray="4 4" strokeOpacity={0.6} label={{ value: 'Target', fill: '#facc15', fontSize: 10 }} />
                             <Bar dataKey="konsumsi" fill="#22d3ee" fillOpacity={0.8} radius={[4, 4, 0, 0]} name="Konsumsi (Wh)" />
@@ -79,10 +79,10 @@ export default function Analisis() {
                     <ResponsiveContainer width="100%" height={240}>
                         <LineChart data={monthly} margin={{ top: 5, right: 5, bottom: 0, left: -10 }}>
                             <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="4 4" />
-                            <XAxis dataKey="month" tick={{ fill: '#475569', fontSize: 10, fontFamily: 'Share Tech Mono' }} />
-                            <YAxis tick={{ fill: '#475569', fontSize: 10, fontFamily: 'Share Tech Mono' }} />
+                            <XAxis dataKey="month" tick={{ fill: '#475569', fontSize: 10, fontFamily: 'Inter' }} />
+                            <YAxis tick={{ fill: '#475569', fontSize: 10, fontFamily: 'Inter' }} />
                             <Tooltip content={<CustomTooltip />} />
-                            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 10, fontFamily: 'Share Tech Mono', color: '#94a3b8' }} />
+                            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 10, fontFamily: 'Inter', color: '#94a3b8' }} />
                             <Line type="monotone" dataKey="konsumsi" stroke="#22d3ee" strokeWidth={2} dot={{ r: 3, fill: '#22d3ee' }} name="Tahun Ini" />
                             <Line type="monotone" dataKey="prevYear" stroke="#475569" strokeWidth={2} strokeDasharray="4 4" dot={false} name="Tahun Lalu" />
                         </LineChart>

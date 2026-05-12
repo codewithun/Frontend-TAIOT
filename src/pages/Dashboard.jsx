@@ -427,8 +427,8 @@ export default function Dashboard() {
 
                         <ResponsiveContainer width="100%" height={280}>
                             <BarChart data={weeklyUsage} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                                <XAxis dataKey="day" tick={{ fill: '#475569', fontSize: 10, fontFamily: 'Share Tech Mono' }} />
-                                <YAxis tick={{ fill: '#475569', fontSize: 10, fontFamily: 'Share Tech Mono' }} />
+                                <XAxis dataKey="day" tick={{ fill: '#475569', fontSize: 10, fontFamily: 'Inter' }} />
+                                <YAxis tick={{ fill: '#475569', fontSize: 10, fontFamily: 'Inter' }} />
                                 <Tooltip content={<WeeklyTooltip />} />
                                 <Bar dataKey="kWh" radius={[8, 8, 0, 0]} barSize={28}>
                                     {weeklyUsage.map((entry, index) => (

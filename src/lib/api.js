@@ -35,6 +35,30 @@ export async function setRelayState(payload) {
   })
 }
 
+export async function getRelayDevices() {
+  return request('/relay-devices')
+}
+
+export async function createRelayDevice(payload) {
+  return request('/relay-devices', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateRelayDevice(id, payload) {
+  return request(`/relay-devices/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteRelayDevice(id) {
+  return request(`/relay-devices/${id}`, {
+    method: 'DELETE',
+  })
+}
+
 export async function sendAi(payload) {
   return request('/ai', {
     method: 'POST',
@@ -42,4 +66,14 @@ export async function sendAi(payload) {
   })
 }
 
-export default { getLatestPzem, getPzemHistory, getRelayState, setRelayState, sendAi }
+export default {
+  createRelayDevice,
+  deleteRelayDevice,
+  getLatestPzem,
+  getPzemHistory,
+  getRelayDevices,
+  getRelayState,
+  setRelayState,
+  sendAi,
+  updateRelayDevice,
+}
